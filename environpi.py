@@ -4,17 +4,18 @@
 
 import qwiic_bme280
 import qwiic_ccs811
-import datetime
+from datetime import datetime
 import time
 import sys
 from PiPocketGeiger import RadiationWatch
 from sps30 import SPS30
-from influxdb import InfluxDBClient
+from influxdb_client import InfluxDBClient, Point, WritePrecision
+from influxdb_client.client.write_api import SYNCHRONOUS
 import secret
 
-def enterData(client, name, location, measurements):
+def enterData(client, write_api, name, location, measurements):
     data = []
-    cTime = datetime.datetime.utcnow()
+    cTime = datetime.utcnow()
     for point in measurements:
         data.append(
             {
@@ -22,21 +23,11 @@ def enterData(client, name, location, measurements):
                 'tags': {
                     'location': location
                 },
-                #'time': cTime,
+                'time': cTime,
                 'fields': {'value': measurements[point]}
             }
         )
-    #data = [
-    #    {
-    #        "measurement": name,
-    #        "tags": {
-    #            "location": location
-    #        },
-    #        "time": datetime.datetime.utcnow(),
-    #        "fields": measurements
-    #    }
-    #]
-    client.write_points(data)
+    write_api.write(secret.bucket, secret.org, data)
 
 def run():
     # Sensor Setup
@@ -46,7 +37,8 @@ def run():
     sps30 = SPS30(1)
 
     # Database Initialization
-    client = InfluxDBClient(secret.host, secret.port, secret.user, secret.password, secret.dbname)
+    client = InfluxDBClient(url=secret.url, token=secret.token)
+    write_api = client.write_api(write_options=SYNCHRONOUS)
 
     # Config
     interval = 10
@@ -84,11 +76,11 @@ def run():
         measurements['Radiation_uSvh'] = radStatus['uSvh']
         measurements['Radiation_uSvh_Error'] = radStatus['uSvhError']
         measurements['Radiation_CPM'] = radStatus['cpm']
-        if spsConnected:
-            sps30.read_measured_values()
-            measurements.update(sps30.dict_values)
+        #if spsConnected:
+            #sps30.read_measured_values()
+            #measurements.update(sps30.dict_values)
         print(measurements)
-        enterData(client, "Environpi", "53 Farragut", measurements)
+        enterData(client, write_api, "Environpi", "53 Farragut", measurements)
         time.sleep(interval)
             
     
